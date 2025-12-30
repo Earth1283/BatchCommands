@@ -5,6 +5,23 @@ settings:
   batch-folder: "batches"
   # The file extension for batch files.
   file-extension: ".batch"
+  # Timer mode for !sleep commands.
+  # 'ticks': Uses the server tick loop (1 second = 20 ticks). Tied to server performance (lag affects time).
+  # 'realtime': Uses the system clock (Thread.sleep). More accurate to real time, runs asynchronously.
+  timer-mode: "ticks"
+
+security:
+  # If true, commands matching the blacklist will be removed from the batch before execution.
+  remove-dangerous-commands: true
+  # List of commands that are not allowed to be executed via batch files.
+  # These checks are performed case-insensitively.
+  command-blacklist:
+    - "stop"
+    - "restart"
+    - "op"
+    - "deop"
+    - "reload"
+    - "rl"
 
 messages:
   # MiniMessage format is supported: https://docs.advntr.dev/minimessage/format.html
@@ -15,3 +32,5 @@ messages:
   execution-started: "<yellow>Executing batch file '<filename>'..."
   read-error: "<red>An error occurred while reading the batch file."
   success: "<green>Successfully executed <count> commands from '<filename>'."
+  skipped-dangerous: "<yellow>Skipped <count> dangerous command(s) found in '<filename>'."
+  invalid-sleep: "<red>Invalid sleep duration in line: <line>"

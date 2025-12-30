@@ -1,0 +1,14 @@
+# BatchCommands Linter Configuration
+# This file will be used to configure advanced command validation.
+
+enabled: true
+
+# Rules to be implemented later
+rules:
+  check-command-existence: true
+  warn-on-missing-slash: false
+  suggest-alternatives: true
+
+# Custom validation patterns
+custom-patterns:
+  # Example: - "^/give @a .*"

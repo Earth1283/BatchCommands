@@ -14,8 +14,9 @@ public final class BatchCommands extends JavaPlugin {
         // Plugin startup logic
         getLogger().info("BatchCommands is starting up...");
 
-        // Save default config if it doesn't exist
+        // Save default configs if they don't exist
         saveDefaultConfig();
+        saveResource("linter.yml", false);
 
         // Create the plugin's data folder if it doesn't exist
         if (!getDataFolder().exists()) {
