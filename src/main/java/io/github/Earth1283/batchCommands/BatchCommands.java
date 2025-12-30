@@ -1,5 +1,7 @@
 package io.github.Earth1283.batchCommands;
 
+import org.bukkit.configuration.file.FileConfiguration;
+import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import java.io.File;
@@ -8,6 +10,9 @@ public final class BatchCommands extends JavaPlugin {
 
     private File batchesFolder;
     private String fileExtension;
+    
+    private File linterConfigFile;
+    private FileConfiguration linterConfig;
 
     @Override
     public void onEnable() {
@@ -26,6 +31,9 @@ public final class BatchCommands extends JavaPlugin {
         // Load settings from config
         String folderName = getConfig().getString("settings.batch-folder", "batches");
         this.fileExtension = getConfig().getString("settings.file-extension", ".batch");
+        
+        // Load linter config
+        loadLinterConfig();
 
         // Create the batch files sub-folder
         batchesFolder = new File(getDataFolder(), folderName);
@@ -45,6 +53,18 @@ public final class BatchCommands extends JavaPlugin {
     public void onDisable() {
         // Plugin shutdown logic
         getLogger().info("BatchCommands has been disabled.");
+    }
+    
+    private void loadLinterConfig() {
+        linterConfigFile = new File(getDataFolder(), "linter.yml");
+        linterConfig = YamlConfiguration.loadConfiguration(linterConfigFile);
+    }
+
+    public FileConfiguration getLinterConfig() {
+        if (linterConfig == null) {
+            loadLinterConfig();
+        }
+        return linterConfig;
     }
 
     /**

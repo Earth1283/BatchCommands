@@ -8,18 +8,22 @@ import org.bukkit.Bukkit;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
+import org.bukkit.help.HelpTopic;
 
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileReader;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 public class FileBatchCommand implements CommandExecutor {
 
     private final BatchCommands plugin;
     private final MiniMessage miniMessage;
+    private final BatchLinter linter;
 
     private enum ActionType { COMMAND, SLEEP }
 
@@ -42,6 +46,7 @@ public class FileBatchCommand implements CommandExecutor {
     public FileBatchCommand(BatchCommands plugin) {
         this.plugin = plugin;
         this.miniMessage = MiniMessage.miniMessage();
+        this.linter = new BatchLinter(plugin);
     }
 
     private void sendMessage(CommandSender sender, String key, TagResolver... placeholders) {
@@ -98,8 +103,20 @@ public class FileBatchCommand implements CommandExecutor {
 
         sendMessage(sender, "execution-started", Placeholder.unparsed("filename", finalFileName));
 
+        // Capture known commands on the main thread for thread safety
+        Set<String> knownCommands = new HashSet<>();
+        for (HelpTopic topic : Bukkit.getHelpMap().getHelpTopics()) {
+            String name = topic.getName();
+            if (name.startsWith("/")) {
+                knownCommands.add(name.substring(1).toLowerCase());
+            } else {
+                knownCommands.add(name.toLowerCase());
+            }
+        }
+
         Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
             List<BatchAction> batchActions = new ArrayList<>();
+            List<String> linterWarnings = new ArrayList<>();
             int skippedCount = 0;
             
             boolean removeDangerous = plugin.getConfig().getBoolean("security.remove-dangerous-commands", true);
@@ -107,9 +124,18 @@ public class FileBatchCommand implements CommandExecutor {
 
             try (BufferedReader reader = new BufferedReader(new FileReader(batchFile))) {
                 String line;
+                int lineNumber = 0;
                 while ((line = reader.readLine()) != null) {
+                    lineNumber++;
                     line = line.trim();
                     if (!line.isEmpty() && !line.startsWith("#")) {
+                        
+                        // Run linter check
+                        String warning = linter.check(line, knownCommands);
+                        if (warning != null) {
+                            linterWarnings.add("Line " + lineNumber + ": " + warning);
+                        }
+
                         // Check for sleep command
                         if (line.toLowerCase().startsWith("!sleep")) {
                             String[] parts = line.split("\\s+");
@@ -142,11 +168,20 @@ public class FileBatchCommand implements CommandExecutor {
             }
 
             final int finalSkippedCount = skippedCount;
+            final List<String> finalWarnings = linterWarnings;
 
             // Start execution on the main thread
-            Bukkit.getScheduler().runTask(plugin, () -> 
-                executeBatch(sender, finalFileName, batchActions, 0, 0, finalSkippedCount)
-            );
+            Bukkit.getScheduler().runTask(plugin, () -> {
+                // Show warnings first
+                if (!finalWarnings.isEmpty()) {
+                    sender.sendMessage(miniMessage.deserialize("<yellow><b>Linter Warnings:</b>"));
+                    for (String w : finalWarnings) {
+                        sender.sendMessage(miniMessage.deserialize("<yellow> - " + w));
+                    }
+                }
+                
+                executeBatch(sender, finalFileName, batchActions, 0, 0, finalSkippedCount);
+            });
         });
 
         return true;
