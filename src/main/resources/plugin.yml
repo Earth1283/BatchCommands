@@ -1,0 +1,17 @@
+name: BatchCommands
+version: 1.0.0
+main: io.github.Earth1283.batchCommands.BatchCommands
+api-version: 1.19
+author: Earth1283
+description: Allows execution of command batches from files.
+
+commands:
+  filebatch:
+    description: Executes a batch of commands from a specified file.
+    usage: "/filebatch <filename>"
+    permission: batchcommands.execute
+
+permissions:
+  batchcommands.execute:
+    description: Allows a user to execute batch command files.
+    default: op

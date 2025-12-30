@@ -1,0 +1,17 @@
+# BatchCommands Configuration
+
+settings:
+  # The subdirectory in the plugin folder where batch files are stored.
+  batch-folder: "batches"
+  # The file extension for batch files.
+  file-extension: ".batch"
+
+messages:
+  # MiniMessage format is supported: https://docs.advntr.dev/minimessage/format.html
+  prefix: "<gray>[<gradient:green:blue>BatchCommands</gradient>] <reset>"
+  no-permission: "<red>You do not have permission to use this command."
+  usage: "<red>Usage: /filebatch <filename>"
+  file-not-found: "<red>Error: Batch file '<filename>' not found."
+  execution-started: "<yellow>Executing batch file '<filename>'..."
+  read-error: "<red>An error occurred while reading the batch file."
+  success: "<green>Successfully executed <count> commands from '<filename>'."
