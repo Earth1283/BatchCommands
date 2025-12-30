@@ -15,8 +15,10 @@ import java.io.File;
 import java.io.FileReader;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.EnumMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 public class FileBatchCommand implements CommandExecutor {
@@ -121,6 +123,30 @@ public class FileBatchCommand implements CommandExecutor {
             
             boolean removeDangerous = plugin.getConfig().getBoolean("security.remove-dangerous-commands", true);
             List<String> blacklist = plugin.getConfig().getStringList("security.command-blacklist");
+            
+            // Linter setup
+            long maxTime = plugin.getLinterConfig().getLong("execution.max-lint-time-ms", 100);
+            long deadline = System.currentTimeMillis() + maxTime;
+            boolean debugMode = plugin.getLinterConfig().getBoolean("execution.debug-mode", false);
+            
+            List<String> orderStrings = plugin.getLinterConfig().getStringList("execution.lint-order");
+            List<BatchLinter.LintCheck> order = new ArrayList<>();
+            for (String s : orderStrings) {
+                try {
+                    order.add(BatchLinter.LintCheck.valueOf(s));
+                } catch (IllegalArgumentException ignored) {}
+            }
+            
+            // Only apply defaults if the key is missing from the config entirely
+            if (order.isEmpty() && !plugin.getLinterConfig().contains("execution.lint-order")) {
+                order.add(BatchLinter.LintCheck.META_SYNTAX);
+                order.add(BatchLinter.LintCheck.UNKNOWN_META);
+                order.add(BatchLinter.LintCheck.BLACKLIST);
+                order.add(BatchLinter.LintCheck.EXISTENCE);
+            }
+            
+            boolean linterTimedOut = false;
+            Map<BatchLinter.LintCheck, Long> totalTimings = new EnumMap<>(BatchLinter.LintCheck.class);
 
             try (BufferedReader reader = new BufferedReader(new FileReader(batchFile))) {
                 String line;
@@ -128,12 +154,33 @@ public class FileBatchCommand implements CommandExecutor {
                 while ((line = reader.readLine()) != null) {
                     lineNumber++;
                     line = line.trim();
+                    // Ignore empty lines and Python-style comments (#)
                     if (!line.isEmpty() && !line.startsWith("#")) {
                         
-                        // Run linter check
-                        String warning = linter.check(line, knownCommands);
-                        if (warning != null) {
-                            linterWarnings.add("Line " + lineNumber + ": " + warning);
+                        // Run linter check if not timed out
+                        if (!linterTimedOut) {
+                            try {
+                                BatchLinter.LinterResult result = linter.check(line, knownCommands, blacklist, order, deadline);
+                                if (result.warning != null) {
+                                    linterWarnings.add("Line " + lineNumber + ": " + result.warning);
+                                }
+                                
+                                if (debugMode) {
+                                    for (Map.Entry<BatchLinter.LintCheck, Long> entry : result.timings.entrySet()) {
+                                        totalTimings.merge(entry.getKey(), entry.getValue(), Long::sum);
+                                    }
+                                }
+                            } catch (BatchLinter.LinterTimeoutException e) {
+                                linterTimedOut = true;
+                                String action = plugin.getLinterConfig().getString("execution.on-timeout", "SKIP_LINTER");
+                                if ("CANCEL_EXECUTION".equalsIgnoreCase(action)) {
+                                    Bukkit.getScheduler().runTask(plugin, () -> 
+                                        sender.sendMessage(miniMessage.deserialize("<red>Linter timed out. Execution cancelled."))
+                                    );
+                                    return;
+                                }
+                                linterWarnings.add("<yellow>Linter timed out. Skipping checks for remaining lines.");
+                            }
                         }
 
                         // Check for sleep command
@@ -160,6 +207,13 @@ public class FileBatchCommand implements CommandExecutor {
                         batchActions.add(new BatchAction(line));
                     }
                 }
+                
+                // Check for empty file warning
+                if (batchActions.isEmpty() && plugin.getLinterConfig().getBoolean("enabled", true) 
+                        && plugin.getLinterConfig().getBoolean("rules.warn-empty-file", true)) {
+                     linterWarnings.add("File appears to be empty or contains no valid commands.");
+                }
+                
             } catch (IOException e) {
                 sendMessage(sender, "read-error");
                 plugin.getLogger().severe("Could not read batch file: " + finalFileName);
@@ -169,6 +223,7 @@ public class FileBatchCommand implements CommandExecutor {
 
             final int finalSkippedCount = skippedCount;
             final List<String> finalWarnings = linterWarnings;
+            final Map<BatchLinter.LintCheck, Long> finalTimings = totalTimings;
 
             // Start execution on the main thread
             Bukkit.getScheduler().runTask(plugin, () -> {
@@ -177,6 +232,15 @@ public class FileBatchCommand implements CommandExecutor {
                     sender.sendMessage(miniMessage.deserialize("<yellow><b>Linter Warnings:</b>"));
                     for (String w : finalWarnings) {
                         sender.sendMessage(miniMessage.deserialize("<yellow> - " + w));
+                    }
+                }
+                
+                // Show debug report
+                if (debugMode && !finalTimings.isEmpty()) {
+                    sender.sendMessage(miniMessage.deserialize("<gray><b>Linter Debug Report:</b>"));
+                    for (Map.Entry<BatchLinter.LintCheck, Long> entry : finalTimings.entrySet()) {
+                        double ms = entry.getValue() / 1_000_000.0;
+                        sender.sendMessage(miniMessage.deserialize("<gray> - " + entry.getKey() + ": <yellow>" + String.format("%.2f", ms) + "ms"));
                     }
                 }
                 

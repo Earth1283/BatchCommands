@@ -3,6 +3,9 @@ package io.github.Earth1283.batchCommands;
 import org.bukkit.configuration.file.FileConfiguration;
 
 import java.util.Collection;
+import java.util.EnumMap;
+import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 public class BatchLinter {
@@ -13,46 +16,135 @@ public class BatchLinter {
         this.plugin = plugin;
     }
 
+    public enum LintCheck {
+        META_SYNTAX,
+        UNKNOWN_META,
+        BLACKLIST,
+        EXISTENCE
+    }
+
+    public static class LinterTimeoutException extends Exception {}
+
+    public static class LinterResult {
+        public final String warning;
+        public final Map<LintCheck, Long> timings;
+
+        public LinterResult(String warning, Map<LintCheck, Long> timings) {
+            this.warning = warning;
+            this.timings = timings;
+        }
+    }
+
     /**
      * Checks a command line for issues.
      * @param line The command line to check.
      * @param knownCommands A set of all known command aliases on the server (lowercase).
-     * @return A warning message if an issue is found, or null if it's valid.
+     * @param blacklist A list of blacklisted commands.
+     * @param order The order of checks to perform.
+     * @param deadline The timestamp (ms) by which linting must finish.
+     * @return A LinterResult containing any warning and timing data.
+     * @throws LinterTimeoutException if the deadline is exceeded.
      */
-    public String check(String line, Set<String> knownCommands) {
+    public LinterResult check(String line, Set<String> knownCommands, List<String> blacklist, List<LintCheck> order, long deadline) throws LinterTimeoutException {
         FileConfiguration config = plugin.getLinterConfig();
+        Map<LintCheck, Long> timings = new EnumMap<>(LintCheck.class);
+
         if (!config.getBoolean("enabled", true)) {
-            return null;
+            return new LinterResult(null, timings);
         }
 
-        if (line.trim().isEmpty() || line.startsWith("#") || line.toLowerCase().startsWith("!sleep")) {
-            return null;
+        if (line.trim().isEmpty() || line.startsWith("#")) {
+            return new LinterResult(null, timings);
         }
 
-        // Clean up command
-        String temp = line.trim();
-        if (temp.startsWith("/")) {
-            temp = temp.substring(1);
-        }
-        String[] parts = temp.split("\\s+");
-        if (parts.length == 0) return null;
-        String cmdName = parts[0].toLowerCase();
+        String trimmed = line.trim();
+        boolean isMeta = trimmed.startsWith("!");
+        String cmdName = "";
 
-        // Check 1: Existence
-        if (config.getBoolean("rules.check-command-existence", true)) {
-            if (!knownCommands.contains(cmdName)) {
-                // It doesn't exist. Check for alternatives?
-                if (config.getBoolean("rules.suggest-alternatives", true)) {
-                    String suggestion = findClosestMatch(cmdName, knownCommands);
-                    if (suggestion != null) {
-                        return "Unknown command '" + cmdName + "'. Did you mean '" + suggestion + "'?";
-                    }
-                }
-                return "Unknown command '" + cmdName + "'.";
+        if (!isMeta) {
+            String temp = trimmed;
+            if (temp.startsWith("/")) {
+                temp = temp.substring(1);
+            }
+            String[] parts = temp.split("\\s+");
+            if (parts.length > 0) {
+                cmdName = parts[0].toLowerCase();
+            } else {
+                return new LinterResult(null, timings);
             }
         }
 
-        return null;
+        for (LintCheck check : order) {
+            if (System.currentTimeMillis() > deadline) {
+                throw new LinterTimeoutException();
+            }
+
+            long start = System.nanoTime();
+            String warning = null;
+
+            switch (check) {
+                case META_SYNTAX:
+                    if (isMeta && trimmed.toLowerCase().startsWith("!sleep")) {
+                        if (config.getBoolean("rules.warn-invalid-syntax", true)) {
+                            String[] parts = trimmed.split("\\s+");
+                            if (parts.length < 2) {
+                                warning = "Invalid syntax for !sleep. Usage: !sleep <seconds>";
+                            } else {
+                                try {
+                                    Double.parseDouble(parts[1]);
+                                } catch (NumberFormatException e) {
+                                    warning = "Invalid duration for !sleep: '" + parts[1] + "'. Expected a number.";
+                                }
+                            }
+                        }
+                    }
+                    break;
+
+                case UNKNOWN_META:
+                    if (isMeta && !trimmed.toLowerCase().startsWith("!sleep")) {
+                        if (config.getBoolean("rules.warn-unknown-meta", true)) {
+                            warning = "Unknown meta-command '" + trimmed.split("\\s+")[0] + "'. Supported: !sleep";
+                        }
+                    }
+                    break;
+
+                case BLACKLIST:
+                    if (!isMeta && config.getBoolean("rules.warn-on-blacklisted", true)) {
+                        for (String blocked : blacklist) {
+                            if (cmdName.equalsIgnoreCase(blocked)) {
+                                warning = "Command '" + cmdName + "' is blacklisted.";
+                                break;
+                            }
+                        }
+                    }
+                    break;
+
+                case EXISTENCE:
+                    if (!isMeta && config.getBoolean("rules.check-command-existence", true)) {
+                        if (!knownCommands.contains(cmdName)) {
+                            if (config.getBoolean("rules.suggest-alternatives", true)) {
+                                String suggestion = findClosestMatch(cmdName, knownCommands);
+                                if (suggestion != null) {
+                                    warning = "Unknown command '" + cmdName + "'. Did you mean '" + suggestion + "'?";
+                                } else {
+                                    warning = "Unknown command '" + cmdName + "'.";
+                                }
+                            } else {
+                                warning = "Unknown command '" + cmdName + "'.";
+                            }
+                        }
+                    }
+                    break;
+            }
+
+            timings.put(check, System.nanoTime() - start);
+            
+            if (warning != null) {
+                return new LinterResult(warning, timings);
+            }
+        }
+
+        return new LinterResult(null, timings);
     }
 
     private String findClosestMatch(String target, Collection<String> candidates) {

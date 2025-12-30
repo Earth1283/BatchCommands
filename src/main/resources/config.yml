@@ -1,20 +1,34 @@
-# BatchCommands Configuration
+# ==============================================================================
+# BatchCommands Main Configuration
+# ==============================================================================
 
 settings:
   # The subdirectory in the plugin folder where batch files are stored.
+  # Default: "batches"
+  # Example: "scripts" would look in "plugins/BatchCommands/scripts/"
   batch-folder: "batches"
+
   # The file extension for batch files.
+  # Default: ".batch"
+  # Note: The plugin will automatically append this if the user doesn't type it.
   file-extension: ".batch"
-  # Timer mode for !sleep commands.
-  # 'ticks': Uses the server tick loop (1 second = 20 ticks). Tied to server performance (lag affects time).
-  # 'realtime': Uses the system clock (Thread.sleep). More accurate to real time, runs asynchronously.
+
+  # Timer mode for !sleep commands (e.g., !sleep 5).
+  # Options:
+  #   - 'ticks': Uses the server tick loop (1 second = 20 ticks).
+  #     Pros: Synchronized with game logic. Cons: Slows down if the server lags (low TPS).
+  #   - 'realtime': Uses the system clock (Thread.sleep).
+  #     Pros: Accurate to real-world time. Cons: Runs independently of server ticks.
   timer-mode: "ticks"
 
 security:
   # If true, commands matching the blacklist will be removed from the batch before execution.
+  # If false, dangerous commands will be executed (NOT RECOMMENDED).
   remove-dangerous-commands: true
+
   # List of commands that are not allowed to be executed via batch files.
   # These checks are performed case-insensitively.
+  # The check compares the first word of the command (e.g., "stop" matches "/stop now").
   command-blacklist:
     - "stop"
     - "restart"
@@ -24,13 +38,32 @@ security:
     - "rl"
 
 messages:
-  # MiniMessage format is supported: https://docs.advntr.dev/minimessage/format.html
+  # All messages support MiniMessage format: https://docs.advntr.dev/minimessage/format.html
+  # You can use gradients, RGB colors, and standard formatting.
+  
   prefix: "<gray>[<gradient:green:blue>BatchCommands</gradient>] <reset>"
   no-permission: "<red>You do not have permission to use this command."
   usage: "<red>Usage: /filebatch <filename>"
+  
+  # Sent when the specified file does not exist in the batch folder.
+  # Placeholders: <filename>
   file-not-found: "<red>Error: Batch file '<filename>' not found."
+  
+  # Sent immediately before processing starts.
+  # Placeholders: <filename>
   execution-started: "<yellow>Executing batch file '<filename>'..."
+  
+  # Sent if an I/O error occurs (e.g., file permissions).
   read-error: "<red>An error occurred while reading the batch file."
+  
+  # Sent after all commands have been dispatched.
+  # Placeholders: <count> (number of commands executed), <filename>
   success: "<green>Successfully executed <count> commands from '<filename>'."
+  
+  # Sent if dangerous commands were removed.
+  # Placeholders: <count>, <filename>
   skipped-dangerous: "<yellow>Skipped <count> dangerous command(s) found in '<filename>'."
+  
+  # Sent if a !sleep command is malformed (e.g., !sleep abc).
+  # Placeholders: <line>
   invalid-sleep: "<red>Invalid sleep duration in line: <line>"

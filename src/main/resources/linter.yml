@@ -1,14 +1,82 @@
+# ==============================================================================
 # BatchCommands Linter Configuration
-# This file will be used to configure advanced command validation.
+# ==============================================================================
+# This file controls the "Linter" feature, which checks batch files for common
+# mistakes (like typos) before executing them.
 
+# Master switch to enable or disable the entire linter.
+# Default: true
 enabled: true
 
-# Rules to be implemented later
 rules:
+  # Checks if the command exists on the server.
+  # It compares the command against the server's HelpMap (list of all commands).
+  # Default: true
   check-command-existence: true
-  warn-on-missing-slash: false
+
+  # If an unknown command is found, try to find a similar valid command
+  # and suggest it (e.g., "Unknown command 'gm'. Did you mean 'gamemode'?").
+  # Uses Levenshtein distance algorithm.
+  # Default: true
   suggest-alternatives: true
 
-# Custom validation patterns
+  # [Future Feature] Warn if a command in the file is missing a leading slash?
+  # Currently, the plugin handles commands with or without slashes, but you might
+  # want to enforce a style.
+  # Default: false
+  warn-on-missing-slash: false
+
+  # Warn if a command is blacklisted (e.g., "stop", "op").
+  # This duplicates the security check but provides a warning report before execution.
+  # Default: true
+  warn-on-blacklisted: true
+
+  # Warn if an unknown meta-command (starting with !) is used.
+  # Currently only !sleep is supported.
+  # Default: true
+  warn-unknown-meta: true
+
+  # Warn if a meta-command has invalid syntax (e.g., "!sleep" without a number).
+  # Default: true
+  warn-invalid-syntax: true
+
+  # Warn if the batch file contains no valid commands.
+  # Default: true
+  warn-empty-file: true
+
+# Execution Settings
+execution:
+  # The maximum time (in milliseconds) the linter is allowed to run before timing out.
+  # This prevents large files or complex checks (like Levenshtein) from causing lag or delays.
+  # Default: 100
+  max-lint-time-ms: 100
+
+  # What to do if the linter exceeds the max time?
+  # Options:
+  #   - SKIP_LINTER: Stop linting and proceed with execution immediately. (Default)
+  #   - CANCEL_EXECUTION: Stop everything and do not run the batch file.
+  on-timeout: SKIP_LINTER
+
+  # If true, prints a performance report showing how long each lint step took.
+  # Useful for optimizing your lint-order or max-lint-time-ms.
+  # Default: false
+  debug-mode: false
+
+  # The order in which checks are performed.
+  # You can reorder these to prioritize faster checks (like syntax) before slower ones (like command existence).
+  # Available checks:
+  #   - META_SYNTAX (Checks !sleep arguments, etc.) - fast
+  #   - UNKNOWN_META (Checks for unknown ! commands) - fast
+  #   - BLACKLIST (Checks against security blacklist) - fast
+  #   - EXISTENCE (Checks if command exists on server) - slow (requires looking up command map)
+  lint-order:
+    - META_SYNTAX
+    - UNKNOWN_META
+    - BLACKLIST
+    - EXISTENCE
+
+# Custom validation patterns (Regex).
+# You can add custom rules to warn about specific command patterns.
 custom-patterns:
-  # Example: - "^/give @a .*"
+  # Example: Warn if someone tries to use a selector without arguments
+  # - "^/kill @e$" 
