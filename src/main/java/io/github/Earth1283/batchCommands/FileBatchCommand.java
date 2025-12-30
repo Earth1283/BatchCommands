@@ -3,6 +3,7 @@ package io.github.Earth1283.batchCommands;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.minimessage.MiniMessage;
 import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder;
+import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver;
 import org.bukkit.Bukkit;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
@@ -25,7 +26,7 @@ public class FileBatchCommand implements CommandExecutor {
         this.miniMessage = MiniMessage.miniMessage();
     }
 
-    private void sendMessage(CommandSender sender, String key, Placeholder... placeholders) {
+    private void sendMessage(CommandSender sender, String key, TagResolver... placeholders) {
         String prefix = plugin.getConfig().getString("messages.prefix", "");
         String message = plugin.getConfig().getString("messages." + key, "");
         if (!message.isEmpty()) {
